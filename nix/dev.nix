@@ -35,6 +35,10 @@ mkShell {
     cargo-edit
     cargo-outdated
     cargo-nextest
+    wasm-bindgen-cli
+
+    #= JS
+    nodejs
   ];
 
   shellHook = ''

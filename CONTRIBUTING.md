@@ -29,6 +29,7 @@ Use the affected component as the scope:
 
 - **Core**: `core` (`crates/core`)
 - **GitHub Host**: `github` (`crates/github`)
+- **JS / Wasm Bindings**: `js` (`bindings/js`)
 - **Infra / Meta**: `nix`, `deps`, `docs`
 
 > [!tip]

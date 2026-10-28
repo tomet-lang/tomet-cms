@@ -75,15 +75,9 @@ pub trait HttpClient {
 - **`HttpResponse`**: Contains HTTP `status` code (`u16`), `headers`, and `body` (`Vec<u8>`).
 - **Single-threaded Wasm**: Futures are not required to be `Send`, making them directly usable in single-threaded WebAssembly runtimes.
 
-### Browser `fetch` Integration
+### JavaScript `fetch` Integration
 
-In a browser WebAssembly environment (using `wasm-bindgen` and `web-sys`), implement `HttpClient` by delegating to `window.fetch()`:
-
-1. Map `req.method` and `req.url` to a `web_sys::RequestInit` object.
-2. Populate headers from `req.headers` (including `Authorization: Bearer <token>`).
-3. Set the request body from `req.body` (e.g. as `js_sys::Uint8Array`).
-4. Invoke `web_sys::window().unwrap().fetch_with_str_and_init(...)`.
-5. Await the JavaScript Promise, read status code, headers, and body bytes (`resp.array_buffer()`), and construct `HttpResponse`.
+In JavaScript/WebAssembly environments (`bindings/js`), `JsHttpClient` implements `HttpClient` by delegating to `globalThis.fetch` (or a caller-supplied `fetch` function) via `js-sys` and `wasm-bindgen-futures`, without assuming a browser `window` global.
 
 ### Offline & Fake Client
 
@@ -95,10 +89,63 @@ client.queue_response(HttpResponse::new(200, b"{\"data\": ...}".to_vec()));
 let host = GitHubHost::new(client.clone(), "owner", "repo", "main", "dummy-token");
 ```
 
+## JavaScript & WebAssembly Bindings (`@tomet/cms`)
+
+`bindings/js` provides the `@tomet/cms` npm package, exposing `tomet-cms` and `tomet-cms-github` to JavaScript and TypeScript runtimes (browsers, Node.js, Deno, Cloudflare Workers) via `wasm-bindgen`.
+
+### Usage
+
+```javascript
+import init, { GitHubCms, listConflicts, resolveConflict } from '@tomet/cms';
+
+// Initialize the WebAssembly module
+await init();
+
+// Synchronous conflict inspection & single-conflict resolution
+const conflicts = listConflicts(sourceText);
+const resolved = resolveConflict(sourceText, 0, 'a');
+
+// GitHub CMS client
+const cms = new GitHubCms({
+  owner: 'octocat',
+  repo: 'my-wiki',
+  branch: 'main', // optional, defaults to "main"
+  token: 'github_pat_...',
+});
+
+// Create fresh document
+const createResult = await cms.createFile({
+  path: 'notes/welcome.tmt',
+  content: '=[ Welcome ]\n\nHello, world!\n',
+  message: 'docs: create welcome page',
+});
+
+// Edit existing document with AST 3-way merge & automatic retry
+const editResult = await cms.editFile({
+  path: 'notes/welcome.tmt',
+  baseRev: createResult.revision,
+  content: '=[ Welcome ]\n\nUpdated content.\n',
+  message: 'docs: update welcome page',
+});
+```
+
+### Machine-Readable Errors (`.code`)
+
+All errors thrown or rejected across the Wasm boundary are standard JavaScript `Error` instances containing a machine-readable `.code: string` property:
+
+- **`SaveError`**: `"NonTmtPath"`, `"AlreadyExists"`, `"MaxRetriesExceeded"`, `"ParseError"`
+- **`HostError`**: `"Unauthorized"`, `"Forbidden"`, `"RateLimited"`, `"NonTextBlob"`, `"BranchMoved"`, `"RevisionNotFound"`, `"HostOther"`
+- **`ConflictError`**: `"ConflictParseError"`, `"IndexOutOfBounds"`, `"InvalidSide"`
+
+### Custom Transport & Offline Testing
+
+Callers can pass a custom `fetch`-compatible function in `new GitHubCms({ ..., fetch })` to intercept requests, mock responses, or run completely offline without real network access.
+
 ## Workspace Layout
 
 - `crates/core` (`tomet-cms`) -- Core library.
 - `crates/github` (`tomet-cms-github`) -- GitHub host implementation over GraphQL.
+- `bindings/js` (`tomet-cms-js` / `@tomet/cms`) -- WebAssembly bindings and JS/TS SDK.
 
 ## Building and Testing
 
@@ -111,7 +158,8 @@ just build
 ### Run tests
 
 ```bash
-just test
+just test        # Rust unit and integration tests
+just test-wasm   # Node.js Wasm integration test suite
 ```
 
 ### Check code
@@ -119,6 +167,8 @@ just test
 ```bash
 just check
 just clippy
+just check-wasm  # check WebAssembly compilation across crates
+just build-wasm  # build release Wasm binary and pkg/ bindings
 ```
 
 ### Documentation

@@ -2,6 +2,9 @@
 # Files ignored by Git.
 # -----------------------------------------------------------------------
 
+#= WASM build
+bindings/js/pkg/
+
 #= Build
 build/
 dist/

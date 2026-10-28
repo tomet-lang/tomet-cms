@@ -19,6 +19,20 @@ pub enum HttpMethod {
     Other(String),
 }
 
+impl HttpMethod {
+    /// Returns the string representation of the HTTP method.
+    pub fn as_str(&self) -> &str {
+        match self {
+            Self::Get => "GET",
+            Self::Post => "POST",
+            Self::Put => "PUT",
+            Self::Delete => "DELETE",
+            Self::Head => "HEAD",
+            Self::Other(m) => m.as_str(),
+        }
+    }
+}
+
 impl fmt::Display for HttpMethod {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
@@ -139,9 +153,9 @@ impl std::error::Error for HttpError {}
 /// # Concurrency & Single-Threading Contract
 /// The futures returned by [`HttpClient`] methods are deliberately **not** bounded by `Send`.
 /// `tomet-cms` and `tomet-cms-github` are designed to run in browser WebAssembly
-/// (`wasm32-unknown-unknown`), which is single-threaded. In browser environments,
-/// this trait is backed by JavaScript's `window.fetch`. Callers are responsible for
-/// driving the returned futures on their local task executor.
+/// (`wasm32-unknown-unknown`), which is single-threaded. In JavaScript/WebAssembly environments,
+/// this trait is backed by `globalThis.fetch` (see `JsHttpClient` in `bindings/js`). Callers are
+/// responsible for driving the returned futures on their local task executor.
 #[allow(async_fn_in_trait)]
 pub trait HttpClient {
     /// Sends an HTTP request and asynchronously returns the response or a transport error.

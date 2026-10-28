@@ -20,7 +20,14 @@ check:
     cargo check --workspace --all-targets
 
 check-wasm:
-    cargo check -p tomet-cms -p tomet-cms-github --target wasm32-unknown-unknown
+    cargo check -p tomet-cms -p tomet-cms-github -p tomet-cms-js --target wasm32-unknown-unknown
+
+build-wasm:
+    cargo build -p tomet-cms-js --target wasm32-unknown-unknown --release
+    wasm-bindgen --target web --out-dir bindings/js/pkg target/wasm32-unknown-unknown/release/tomet_cms_js.wasm
+
+test-wasm: build-wasm
+    node --test bindings/js/test.mjs
 
 clippy:
     cargo clippy --workspace --all-targets -- -D warnings

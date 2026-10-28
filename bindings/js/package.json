@@ -1,0 +1,41 @@
+{
+  "name": "@tomet/cms",
+  "version": "0.1.0",
+  "description": "High-performance JavaScript / WebAssembly bindings for tomet-cms",
+  "type": "module",
+  "main": "./index.js",
+  "module": "./index.js",
+  "types": "./index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./index.d.ts",
+      "browser": "./pkg/tomet_cms_js.js",
+      "import": "./index.js",
+      "default": "./index.js"
+    },
+    "./wasm": "./pkg/tomet_cms_js_bg.wasm"
+  },
+  "files": [
+    "index.js",
+    "index.d.ts",
+    "pkg"
+  ],
+  "keywords": [
+    "tomet",
+    "cms",
+    "git",
+    "github",
+    "ast",
+    "merge",
+    "conflict",
+    "wasm"
+  ],
+  "author": "Tomet Project",
+  "license": "MIT OR Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/tomet-lang/tomet-cms.git",
+    "directory": "bindings/js"
+  },
+  "homepage": "https://github.com/tomet-lang/tomet-cms#readme"
+}

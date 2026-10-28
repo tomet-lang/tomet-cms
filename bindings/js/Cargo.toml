@@ -1,0 +1,20 @@
+[package]
+name = "tomet-cms-js"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+tomet-cms =  { workspace = true }
+tomet-cms-github =  { workspace = true }
+
+#= Crates.io
+js-sys = { workspace = true }
+serde = { version = "1.0", default-features = false, features = ["alloc", "derive"] }
+serde_json = { version = "1.0", default-features = false, features = ["alloc"] }
+serde-wasm-bindgen = { workspace = true }
+wasm-bindgen = { workspace = true }
+wasm-bindgen-futures = { workspace = true }

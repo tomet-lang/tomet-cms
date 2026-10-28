@@ -1,8 +1,7 @@
 [workspace]
 resolver = "3"
-members = ["crates/core", "crates/github"]
-
-default-members = ["crates/core", "crates/github"]
+members = ["crates/core", "crates/github", "bindings/js"]
+default-members = ["crates/core", "crates/github", "bindings/js"]
 
 [workspace.package]
 version = "0.1.0"
@@ -11,7 +10,16 @@ rust-version = "1.85"
 license = "MIT OR Apache-2.0"
 
 [workspace.dependencies]
+tomet-cms = { path = "crates/core" }
+tomet-cms-github = { path = "crates/github" }
+#--- Tomet ---
 tomet = { git = "https://github.com/tomet-lang/tomet.git", default-features = false, features = ["parser", "printer", "merge"] }
+
+#= Crates.io
+js-sys = "0.3"
+serde-wasm-bindgen = "0.6"
+wasm-bindgen = "=0.2.129"
+wasm-bindgen-futures = "0.4"
 
 [profile.release]
 opt-level = 3

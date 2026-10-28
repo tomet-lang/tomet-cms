@@ -28,5 +28,8 @@ jobs:
       - name: Check Wasm
         run: nix develop --command just check-wasm
 
+      - name: Test Wasm bindings
+        run: nix develop --command just test-wasm
+
       - name: Check docs
         run: nix develop --command just docs-check
