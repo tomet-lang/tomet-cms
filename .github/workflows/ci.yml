@@ -1,0 +1,32 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  ci:
+    name: Test · Docs · Wasm
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Nix
+        uses: DeterminateSystems/nix-installer-action@main
+
+      - name: Setup Cachix
+        uses: cachix/cachix-action@v15
+        with:
+          name: tomet
+          skipPush: true
+
+      - name: Run checks & tests
+        run: nix develop --command cargo test --workspace
+
+      - name: Check Wasm
+        run: nix develop --command just check-wasm
+
+      - name: Check docs
+        run: nix develop --command just docs-check

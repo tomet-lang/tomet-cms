@@ -17,6 +17,7 @@ let
       "rustfmt"
       "rust-analyzer"
     ])
+    fenix.targets.wasm32-unknown-unknown.stable.rust-std
   ];
 in
 mkShell {

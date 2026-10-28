@@ -1,8 +1,8 @@
 [workspace]
 resolver = "3"
-members = ["app"]
+members = ["crates/core"]
 
-default-members = ["app"]
+default-members = ["crates/core"]
 
 [workspace.package]
 version = "0.1.0"
@@ -11,9 +11,7 @@ rust-version = "1.85"
 license = "MIT OR Apache-2.0"
 
 [workspace.dependencies]
-#= Crates.io
-anyhow = "1"
-clap = { version = "4.6", features = ["derive"] }
+tomet = { git = "https://github.com/tomet-lang/tomet.git", default-features = false, features = ["parser", "printer", "merge"] }
 
 [profile.release]
 opt-level = 3

@@ -19,6 +19,9 @@ test:
 check:
     cargo check --workspace --all-targets
 
+check-wasm:
+    cargo check -p tomet-cms --target wasm32-unknown-unknown
+
 clippy:
     cargo clippy --workspace --all-targets -- -D warnings
 

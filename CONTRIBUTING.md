@@ -27,7 +27,7 @@ All commits must follow the Conventional Commits format: `type(scope): descripti
 
 Use the affected component as the scope:
 
-- **CLI**: `cli` (`app`)
+- **Core**: `core` (`crates/core`)
 - **Infra / Meta**: `nix`, `deps`, `docs`
 
 > [!tip]

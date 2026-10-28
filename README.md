@@ -6,17 +6,43 @@ Content management system for the Tomet ecosystem.
 
 ## Overview
 
-`tomet-cms` provides Git-backed content management capabilities for Tomet workspaces.
+`tomet-cms` is the UI-less, I/O-free content management engine for the Tomet ecosystem, designed to power browser-based editing (e.g. in `tomet-wiki`). It provides document synchronization, three-way AST merging, and conflict resolution over a remote Git host without requiring a local clone.
 
-## Usage
+### What it is
 
-```bash
-tomet-cms [path]              # open CMS for path (defaults to ".")
-```
+- **UI-less & I/O-free library**: Pure logic engine compiled for both native and WebAssembly (`wasm32-unknown-unknown`).
+- **AST-level 3-way merge**: Resolves concurrent document edits using `tomet::merge::merge` instead of line-based diff3.
+- **Optimistic save flow**: Saves directly against the remote head revision with automatic, bounded retries on branch movement.
+- **Byte-identical conflict resolution**: Resolves individual `@conflict` markers by span substitution without re-formatting the surrounding document.
+
+### What it is not
+
+- Not a CLI or application: No binary entry points or terminal interface.
+- Not a UI framework: Presentation and user interaction live downstream in `tomet-wiki`.
+- Not an HTTP client: All remote interactions are abstracted through the async `Host` trait; callers supply transport and authentication.
+
+## Save Flow
+
+1. Caller begins editing a document from a known `base` revision.
+2. At save time, the engine fetches the target branch's current `head` revision and retrieves `remote` content.
+3. If `remote == base`, the fast path commits `local` content directly.
+4. If remote has changed, AST three-way merge is computed (`base`/`local`/`remote`):
+
+- Non-overlapping edits merge cleanly without markers.
+  - Conflicting edits record `@conflict(a: ..., b: ...)` markers in-place and commit the resulting file as normal.
+  - Remote deletions with local modifications follow Git conventions: local content is preserved and reported with a provisional warning.
+
+5. The result is committed on top of `head`. If the branch moved concurrently, the engine retries up to a bounded limit.
+
+## WebAssembly Constraints
+
+- Compiles cleanly to `wasm32-unknown-unknown`.
+- Contains no `std::fs`, `std::net`, `std::time::SystemTime`, or threading dependencies in `core`.
+- The `Host` trait uses asynchronous methods without `Send` bounds, as browser wasm runtimes are single-threaded.
 
 ## Workspace Layout
 
-- `app` (`tomet-cms`) -- Main CLI binary.
+- `crates/core` (`tomet-cms`) -- Core library.
 
 ## Building and Testing
 
