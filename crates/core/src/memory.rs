@@ -13,8 +13,11 @@ use crate::host::{CommitResult, FileContent, Host, HostError, Revision};
 struct MemoryHostState {
     head: Revision,
     commits: BTreeMap<Revision, BTreeMap<String, String>>,
+    commit_messages: BTreeMap<Revision, String>,
+    commits_log: Vec<(Revision, String)>,
     commit_counter: usize,
     branch_moved_countdown: usize,
+    pending_concurrent_file: Option<(String, Option<String>)>,
 }
 
 impl MemoryHostState {
@@ -46,13 +49,19 @@ impl MemoryHost {
         let initial_rev = Revision::new("rev-0");
         let mut commits = BTreeMap::new();
         commits.insert(initial_rev.clone(), BTreeMap::new());
+        let mut commit_messages = BTreeMap::new();
+        commit_messages.insert(initial_rev.clone(), "Initial commit".to_string());
+        let commits_log = vec![(initial_rev.clone(), "Initial commit".to_string())];
 
         Self {
             state: Rc::new(RefCell::new(MemoryHostState {
                 head: initial_rev,
                 commits,
+                commit_messages,
+                commits_log,
                 commit_counter: 0,
                 branch_moved_countdown: 0,
+                pending_concurrent_file: None,
             })),
         }
     }
@@ -103,6 +112,29 @@ impl MemoryHost {
         }
     }
 
+    /// Returns the commit message of the most recent commit, if any.
+    pub fn last_commit_message(&self) -> Option<String> {
+        self.state
+            .borrow()
+            .commits_log
+            .last()
+            .map(|(_, msg)| msg.clone())
+    }
+
+    /// Returns the commit message for a specific revision, if found.
+    pub fn commit_message(&self, rev: &Revision) -> Option<String> {
+        self.state
+            .borrow()
+            .commit_messages
+            .get(rev)
+            .cloned()
+    }
+
+    /// Returns the full list of committed revisions and their messages in creation order.
+    pub fn commits_log(&self) -> Vec<(Revision, String)> {
+        self.state.borrow().commits_log.clone()
+    }
+
     /// Simulates another party advancing the head to an arbitrary revision with current files.
     pub fn advance_head(&self, new_rev: impl Into<Revision>) {
         let mut state = self.state.borrow_mut();
@@ -110,6 +142,8 @@ impl MemoryHost {
         let files = state.commits.get(&head).cloned().unwrap_or_default();
         let rev = new_rev.into();
         state.commits.insert(rev.clone(), files);
+        state.commit_messages.insert(rev.clone(), "Advance head".to_string());
+        state.commits_log.push((rev.clone(), "Advance head".to_string()));
         state.head = rev;
     }
 
@@ -119,6 +153,16 @@ impl MemoryHost {
     /// If `content` is `None`, the file is deleted.
     /// Advances HEAD to a newly generated revision and returns it.
     pub fn simulate_remote_commit(&self, path: &str, content: Option<&str>) -> Revision {
+        self.simulate_remote_commit_with_message(path, content, "Simulated remote commit")
+    }
+
+    /// Simulates a remote commit with a specific commit message.
+    pub fn simulate_remote_commit_with_message(
+        &self,
+        path: &str,
+        content: Option<&str>,
+        message: &str,
+    ) -> Revision {
         let mut state = self.state.borrow_mut();
         let head = state.head.clone();
         let mut files = state.commits.get(&head).cloned().unwrap_or_default();
@@ -134,6 +178,8 @@ impl MemoryHost {
 
         let new_rev = state.new_revision();
         state.commits.insert(new_rev.clone(), files);
+        state.commit_messages.insert(new_rev.clone(), message.to_string());
+        state.commits_log.push((new_rev.clone(), message.to_string()));
         state.head = new_rev.clone();
         new_rev
     }
@@ -144,6 +190,19 @@ impl MemoryHost {
     /// just before checking the expected head, causing a [`HostError::BranchMoved`].
     pub fn simulate_branch_moved_times(&self, times: usize) {
         self.state.borrow_mut().branch_moved_countdown = times;
+    }
+
+    /// Simulates another party committing a specific file change concurrently.
+    ///
+    /// On the next call to `commit_file`, HEAD is advanced with `path` modified
+    /// (or deleted if `content` is `None`), causing [`HostError::BranchMoved`].
+    pub fn simulate_concurrent_file_on_next_commit(
+        &self,
+        path: impl Into<String>,
+        content: Option<impl Into<String>>,
+    ) {
+        self.state.borrow_mut().pending_concurrent_file =
+            Some((path.into(), content.map(Into::into)));
     }
 }
 
@@ -171,8 +230,34 @@ impl Host for MemoryHost {
         path: &str,
         content: &str,
         expected_head: &Revision,
+        message: &str,
     ) -> Result<CommitResult, HostError> {
         let mut state = self.state.borrow_mut();
+
+        // If a concurrent file simulation is queued, execute it before checking head.
+        if let Some((p, c)) = state.pending_concurrent_file.take() {
+            let head = state.head.clone();
+            let mut files = state.commits.get(&head).cloned().unwrap_or_default();
+            match c {
+                Some(text) => {
+                    files.insert(p, text);
+                }
+                None => {
+                    files.remove(&p);
+                }
+            }
+            let concurrent_rev = state.new_revision();
+            state.commits.insert(concurrent_rev.clone(), files);
+            state.commit_messages.insert(
+                concurrent_rev.clone(),
+                "Simulated concurrent commit".to_string(),
+            );
+            state.commits_log.push((
+                concurrent_rev.clone(),
+                "Simulated concurrent commit".to_string(),
+            ));
+            state.head = concurrent_rev;
+        }
 
         // If simulation countdown is active, advance head to simulate another party committing first.
         if state.branch_moved_countdown > 0 {
@@ -186,6 +271,14 @@ impl Host for MemoryHost {
             );
             let concurrent_rev = state.new_revision();
             state.commits.insert(concurrent_rev.clone(), files);
+            state.commit_messages.insert(
+                concurrent_rev.clone(),
+                "Simulated branch moved commit".to_string(),
+            );
+            state.commits_log.push((
+                concurrent_rev.clone(),
+                "Simulated branch moved commit".to_string(),
+            ));
             state.head = concurrent_rev;
         }
 
@@ -202,6 +295,8 @@ impl Host for MemoryHost {
 
         let new_rev = state.new_revision();
         state.commits.insert(new_rev.clone(), files);
+        state.commit_messages.insert(new_rev.clone(), message.to_string());
+        state.commits_log.push((new_rev.clone(), message.to_string()));
         state.head = new_rev.clone();
 
         Ok(CommitResult::new(new_rev))
@@ -241,7 +336,8 @@ mod tests {
         let host = MemoryHost::with_files([("doc.tmt", "Initial.\n")]);
         let head = host.current_head();
 
-        let commit_res = block_on(host.commit_file("doc.tmt", "Updated.\n", &head)).unwrap();
+        let commit_res =
+            block_on(host.commit_file("doc.tmt", "Updated.\n", &head, "Update doc")).unwrap();
         assert_eq!(commit_res.revision.as_str(), "rev-1");
         assert_eq!(host.current_head().as_str(), "rev-1");
         assert_eq!(
@@ -251,6 +347,14 @@ mod tests {
         assert_eq!(
             host.get_file_at(&Revision::new("rev-0"), "doc.tmt"),
             Some("Initial.\n".to_string())
+        );
+        assert_eq!(
+            host.last_commit_message(),
+            Some("Update doc".to_string())
+        );
+        assert_eq!(
+            host.commit_message(&commit_res.revision),
+            Some("Update doc".to_string())
         );
     }
 
@@ -264,7 +368,8 @@ mod tests {
         assert_eq!(new_rev.as_str(), "rev-1");
 
         // Attempt commit with stale head
-        let err = block_on(host.commit_file("doc.tmt", "My edit.\n", &stale_head)).unwrap_err();
+        let err =
+            block_on(host.commit_file("doc.tmt", "My edit.\n", &stale_head, "My edit")).unwrap_err();
         match err {
             HostError::BranchMoved { expected, actual } => {
                 assert_eq!(expected, stale_head);
@@ -281,13 +386,17 @@ mod tests {
 
         host.simulate_branch_moved_times(1);
 
-        let err = block_on(host.commit_file("doc.tmt", "My edit.\n", &head)).unwrap_err();
+        let err = block_on(host.commit_file("doc.tmt", "My edit.\n", &head, "My edit")).unwrap_err();
         assert!(matches!(err, HostError::BranchMoved { .. }));
 
         // Second attempt with current head should now succeed because countdown reached 0
         let current_head = host.current_head();
-        let res = block_on(host.commit_file("doc.tmt", "My edit.\n", &current_head));
+        let res = block_on(host.commit_file("doc.tmt", "My edit.\n", &current_head, "Retry edit"));
         assert!(res.is_ok());
+        assert_eq!(
+            host.last_commit_message(),
+            Some("Retry edit".to_string())
+        );
     }
 
     #[test]

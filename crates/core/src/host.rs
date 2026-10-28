@@ -136,6 +136,8 @@ pub trait Host {
 
     /// Commits a single file change on top of `expected_head`.
     ///
+    /// The caller must supply a human-readable commit `message`.
+    ///
     /// Must fail with [`HostError::BranchMoved`] if the current remote head
     /// no longer matches `expected_head`.
     async fn commit_file(
@@ -143,5 +145,6 @@ pub trait Host {
         path: &str,
         content: &str,
         expected_head: &Revision,
+        message: &str,
     ) -> Result<CommitResult, HostError>;
 }

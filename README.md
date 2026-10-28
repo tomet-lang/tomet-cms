@@ -21,18 +21,27 @@ Content management system for the Tomet ecosystem.
 - Not a UI framework: Presentation and user interaction live downstream in `tomet-wiki`.
 - Not an HTTP client: All remote interactions are abstracted through the async `Host` trait; callers supply transport and authentication.
 
+### Scope
+
+- **One save = one file = one commit**: Multi-file commits and page renaming/moving are deferred.
+- **`.tmt` documents only**: Non-`.tmt` paths are rejected with a typed error (`SaveError::NonTmtPath`); attachment policy is out of scope.
+- **Host-agnostic core**: GitHub is the first target implementation, but `tomet-cms` (core) contains no host-specific assumptions.
+
 ## Save Flow
 
-1. Caller begins editing a document from a known `base` revision.
-2. At save time, the engine fetches the target branch's current `head` revision and retrieves `remote` content.
-3. If `remote == base`, the fast path commits `local` content directly.
-4. If remote has changed, AST three-way merge is computed (`base`/`local`/`remote`):
+1. Caller submits a `SaveRequest`: either `SaveRequest::create` for a fresh document or `SaveRequest::edit` with a known `base` revision. Every request specifies a commit message.
+2. At save time, the engine fetches the target branch's current `head` revision and retrieves `remote` content at `head`.
+3. If creating (`base_rev: None`) and the file already exists remotely, the save fails immediately with `SaveError::AlreadyExists` and commits nothing (no merge).
+4. If editing from a base revision:
 
-- Non-overlapping edits merge cleanly without markers.
-  - Conflicting edits record `@conflict(a: ..., b: ...)` markers in-place and commit the resulting file as normal.
-  - Remote deletions with local modifications follow Git conventions: local content is preserved and reported with a provisional warning.
+- If `remote == base`, the fast path commits `local` content directly.
+  - If remote has changed, AST three-way merge is computed (`base`/`local`/`remote`):
+    - Non-overlapping edits merge without conflict markers (`has_conflicts: false`).
+    - Conflicting edits record `@conflict(a: ..., b: ...)` markers in-place (`has_conflicts: true`) and commit the resulting file as normal.
+    - Remote deletions with local modifications follow Git conventions: local content is preserved and reported with a provisional `SaveWarning::ModifyDeleteConflict`.
 
-5. The result is committed on top of `head`. If the branch moved concurrently, the engine retries up to a bounded limit.
+5. The committed text is inspected via the `conflict` module to determine `has_conflicts: bool`.
+6. The result is committed on top of `head` with the caller-supplied commit message. If the branch moved concurrently, the engine retries up to a bounded limit.
 
 ## WebAssembly Constraints
 

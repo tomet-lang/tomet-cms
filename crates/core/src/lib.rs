@@ -13,6 +13,7 @@ pub use conflict::{
 pub use host::{CommitResult, FileContent, Host, HostError, Revision};
 pub use memory::MemoryHost;
 pub use save::{
-    DEFAULT_MAX_RETRIES, SaveError, SaveOptions, SaveResult, SaveWarning, save, save_with_options,
+    DEFAULT_MAX_RETRIES, SaveError, SaveOptions, SaveRequest, SaveResult, SaveWarning, save,
+    save_with_options,
 };
 pub use tomet;
