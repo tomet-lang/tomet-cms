@@ -1,0 +1,13 @@
+[package]
+name = "tomet-cms-github"
+description = "GitHub Host implementation for tomet-cms"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+tomet-cms = { path = "../core" }
+serde = { version = "1.0", default-features = false, features = ["derive", "alloc"] }
+serde_json = { version = "1.0", default-features = false, features = ["alloc"] }
+base64 = { version = "0.22", default-features = false, features = ["alloc"] }

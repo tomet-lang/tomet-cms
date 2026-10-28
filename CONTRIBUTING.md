@@ -28,6 +28,7 @@ All commits must follow the Conventional Commits format: `type(scope): descripti
 Use the affected component as the scope:
 
 - **Core**: `core` (`crates/core`)
+- **GitHub Host**: `github` (`crates/github`)
 - **Infra / Meta**: `nix`, `deps`, `docs`
 
 > [!tip]

@@ -85,6 +85,16 @@ impl CommitResult {
 /// Errors returned by a [`Host`].
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum HostError {
+    /// Authentication failed or token was rejected (HTTP 401).
+    Unauthorized,
+    /// Permission denied for the requested operation or repository (HTTP 403).
+    Forbidden(String),
+    /// API rate limit exceeded (HTTP 403 / 429).
+    RateLimited,
+    /// The requested file blob is binary or non-text and cannot be processed as a `.tmt` document.
+    NonTextBlob {
+        path: String,
+    },
     /// The target branch moved between reading head and committing.
     BranchMoved {
         expected: Revision,
@@ -99,6 +109,14 @@ pub enum HostError {
 impl fmt::Display for HostError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
+            Self::Unauthorized => {
+                write!(f, "unauthorized: authentication failed or token rejected")
+            }
+            Self::Forbidden(msg) => write!(f, "forbidden: {msg}"),
+            Self::RateLimited => write!(f, "API rate limit exceeded"),
+            Self::NonTextBlob { path } => {
+                write!(f, "file blob is binary or non-text: '{path}'")
+            }
             Self::BranchMoved { expected, actual } => {
                 write!(
                     f,

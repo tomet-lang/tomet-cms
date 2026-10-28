@@ -54,13 +54,60 @@ Content management system for the Tomet ecosystem.
 
 ==[ WebAssembly Constraints ]
 
-- Compiles cleanly to `wasm32-unknown-unknown`.
-- Contains no `std::fs`, `std::net`, `std::time::SystemTime`, or threading dependencies in `core`.
-- The `Host` trait uses asynchronous methods without `Send` bounds, as browser wasm runtimes are single-threaded.
+-| Compiles cleanly to `wasm32-unknown-unknown`.
+-| Contains no `std::fs`, `std::net`, `std::time::SystemTime`, or threading dependencies in `core` or `github`.
+-| The `Host` and `HttpClient` traits use asynchronous methods returning `!Send` futures, as browser wasm runtimes are single-threaded.
+
+==[ GitHub Host (`tomet-cms-github`) ]
+
+`tomet-cms-github` provides a GitHub GraphQL implementation of `tomet-cms::Host` (`GitHubHost`) suitable for both native and WebAssembly (`wasm32-unknown-unknown`) environments.
+
+===[ Design Principles ]
+
+-| **Zero I/O & Injected Transport**: The crate performs no network calls, opens no sockets, and brings in no HTTP runtime dependencies. Callers inject an implementation of the `HttpClient` trait.
+-| **Pure WebAssembly Compatibility**: Only relies on `serde`, `serde_json`, and `base64` with `alloc` feature enabled (no `std` I/O). Fully operational under `wasm32-unknown-unknown`.
+-| **Single GraphQL Endpoint**: All operations (`get_head`, `read_file`, `commit_file`) execute against `https://api.github.com/graphql` via strongly-typed GraphQL request/response structures (`repository`, `object`, and `createCommitOnBranch`).
+-| **Credential Redaction**: `GitHubHost`'s custom `fmt::Debug` implementation always prints `token: "[REDACTED]"`. Authentication tokens (such as GitHub Personal Access Tokens) are never leaked in debug dumps, log messages, or error strings.
+-| **Robust Branch Movement Detection**: If a commit mutation fails, `GitHubHost` queries the latest branch HEAD revision. If the actual HEAD differs from the caller's expected HEAD, it returns `HostError::BranchMoved`, triggering `tomet-cms`'s automatic retry flow. If HEAD is unchanged, the original GraphQL error (e.g. permission or validation error) is preserved and returned.
+
+===[ `HttpClient` Trait Contract ]
+
+The transport abstraction consists of `HttpRequest`, `HttpResponse`, `HttpError`, and `HttpClient`:
+
+```rust
+pub trait HttpClient {
+    async fn send(&self, request: HttpRequest) -> Result<HttpResponse, HttpError>;
+}
+```
+
+-| **`HttpRequest`**: Contains `method` (`HttpMethod`), `url`, `headers` (`Vec<(String, String)>`), and `body` (`Vec<u8>`).
+-| **`HttpResponse`**: Contains HTTP `status` code (`u16`), `headers`, and `body` (`Vec<u8>`).
+-| **Single-threaded Wasm**: Futures are not required to be `Send`, making them directly usable in single-threaded WebAssembly runtimes.
+
+===[ Browser `fetch` Integration ]
+
+In a browser WebAssembly environment (using `wasm-bindgen` and `web-sys`), implement `HttpClient` by delegating to `window.fetch()`:
+
+1. Map `req.method` and `req.url` to a `web_sys::RequestInit` object.
+2. Populate headers from `req.headers` (including `Authorization: Bearer <token>`).
+3. Set the request body from `req.body` (e.g. as `js_sys::Uint8Array`).
+4. Invoke `web_sys::window().unwrap().fetch_with_str_and_init(...)`.
+5. Await the JavaScript Promise, read status code, headers, and body bytes (`resp.array_buffer()`), and construct `HttpResponse`.
+
+===[ Offline & Fake Client ]
+
+For unit tests and offline testing, `tomet-cms-github` provides `FakeHttpClient`:
+
+```rust
+let client = FakeHttpClient::new();
+client.queue_response(HttpResponse::new(200, b"{\"data\": ...}".to_vec()));
+let host = GitHubHost::new(client.clone(), "owner", "repo", "main", "dummy-token");
+```
 
 ==[ Workspace Layout ]
 
 -| @dir(crates/core) (`tomet-cms`) -- Core library.
+-| @dir(crates/github) (`tomet-cms-github`) -- GitHub host implementation over GraphQL.
 
 ==[ Building and Testing ]
 

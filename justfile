@@ -20,7 +20,7 @@ check:
     cargo check --workspace --all-targets
 
 check-wasm:
-    cargo check -p tomet-cms --target wasm32-unknown-unknown
+    cargo check -p tomet-cms -p tomet-cms-github --target wasm32-unknown-unknown
 
 clippy:
     cargo clippy --workspace --all-targets -- -D warnings
