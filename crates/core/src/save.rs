@@ -224,16 +224,19 @@ pub async fn save_with_options<H: Host>(
                         if remote_text == base_text || remote_text == request.local_content {
                             (request.local_content.to_string(), Vec::new())
                         } else {
-                            let base_doc = tomet::parser::parse_document(&base_text)
+                            tomet::parser::parse_document(&base_text)
                                 .map_err(|e| SaveError::ParseError(e.to_string()))?;
-                            let local_doc = tomet::parser::parse_document(request.local_content)
+                            tomet::parser::parse_document(request.local_content)
                                 .map_err(|e| SaveError::ParseError(e.to_string()))?;
-                            let remote_doc = tomet::parser::parse_document(&remote_text)
+                            tomet::parser::parse_document(&remote_text)
                                 .map_err(|e| SaveError::ParseError(e.to_string()))?;
 
-                            let merge_res = tomet::merge::merge(&base_doc, &local_doc, &remote_doc);
-                            let text = tomet::printer::document_to_tm(&merge_res.document);
-                            (text, Vec::new())
+                            let merge_res = tomet::merge::merge(
+                                &base_text,
+                                request.local_content,
+                                &remote_text,
+                            );
+                            (merge_res.text, Vec::new())
                         }
                     }
                 }

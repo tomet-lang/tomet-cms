@@ -13,7 +13,7 @@ license = "MIT OR Apache-2.0"
 tomet-cms = { path = "crates/core" }
 tomet-cms-github = { path = "crates/github" }
 #--- Tomet ---
-tomet = { git = "https://github.com/tomet-lang/tomet.git", default-features = false, features = ["parser", "printer", "merge"] }
+tomet = { git = "https://github.com/tomet-lang/tomet.git", default-features = false, features = ["parser", "printer", "edit", "merge"] }
 
 #= Crates.io
 js-sys = "0.3"

@@ -1,11 +1,12 @@
-//! Tests evaluating round-trip stability of `tomet::printer::document_to_tm`
-//! and AST three-way merging.
+//! Tests verifying byte-for-byte round-trip and merge stability of `tomet::edit`
+//! and `tomet::merge::merge`.
 //!
-//! Captures current printer formatting characteristics and divergences when
-//! documents are re-serialized from AST during a merge.
+//! Ensures that untouched headings, blank lines, inline sugar (`*em*`, `**strong**`),
+//! comments (`//`, `/* */`), multi-line elements, `{ ... }` brace padding, and
+//! fenced code blocks are preserved verbatim during edits and three-way merges.
 
-use tomet::parser::parse_document;
-use tomet::printer::document_to_tm;
+use tomet::edit::{export_doc, import_source};
+use tomet::merge::merge;
 
 #[test]
 fn roundtrip_headings_and_sections() {
@@ -15,18 +16,9 @@ fn roundtrip_headings_and_sections() {
         "==[ Sub Heading ]\n\n",
         "Body paragraph under sub heading.\n"
     );
-    let doc = parse_document(input).unwrap();
-    let output = document_to_tm(&doc);
-
-    // Divergence: Heading brackets lose inner padding (`=[Main Heading]`),
-    // and blank line between heading and its first child block is dropped.
-    let expected_current_output = concat!(
-        "=[Main Heading]\n",
-        "Introductory paragraph under main heading.\n",
-        "==[Sub Heading]\n",
-        "Body paragraph under sub heading.\n"
-    );
-    assert_eq!(output, expected_current_output);
+    let output = export_doc(&import_source(input));
+    assert_eq!(output, input);
+    assert_eq!(merge(input, input, input).text, input);
 }
 
 #[test]
@@ -35,16 +27,9 @@ fn roundtrip_paragraphs_and_inlines() {
         "This is a paragraph with *italic*, **bold**, and `inline code`.\n\n",
         "Second paragraph with a link: @link(target: \"https://example.com\")[Example].\n"
     );
-    let doc = parse_document(input).unwrap();
-    let output = document_to_tm(&doc);
-
-    // Divergence: Markdown inline formatting sugars (`*em*`, `**strong**`)
-    // are desugared at parse time and printed as explicit `@em[...]` and `@strong[...]`.
-    let expected_current_output = concat!(
-        "This is a paragraph with @em[italic], @strong[bold], and `inline code`.\n\n",
-        "Second paragraph with a link: @link(target: \"https://example.com\")[Example].\n"
-    );
-    assert_eq!(output, expected_current_output);
+    let output = export_doc(&import_source(input));
+    assert_eq!(output, input);
+    assert_eq!(merge(input, input, input).text, input);
 }
 
 #[test]
@@ -54,37 +39,29 @@ fn roundtrip_nested_elements() {
         "  Important note inside callout.\n",
         "]\n"
     );
-    let doc = parse_document(input).unwrap();
-    let output = document_to_tm(&doc);
-
-    // Divergence: Block-indented content is flattened into single line brackets,
-    // and quotes on bare string arguments are stripped (`type: info`).
-    let expected_current_output = "@callout(type: info)[Important note inside callout.]\n";
-    assert_eq!(output, expected_current_output);
+    let output = export_doc(&import_source(input));
+    assert_eq!(output, input);
+    assert_eq!(merge(input, input, input).text, input);
 }
 
 #[test]
 fn roundtrip_meta_and_data() {
     let input = "::meta{ title: \"Document Title\", count: 42 }\n";
-    let doc = parse_document(input).unwrap();
-    let output = document_to_tm(&doc);
-
-    // Divergence: Inner spaces inside `{ ... }` are removed.
-    let expected_current_output = "::meta{title: \"Document Title\", count: 42}\n";
-    assert_eq!(output, expected_current_output);
+    let output = export_doc(&import_source(input));
+    assert_eq!(output, input);
+    assert_eq!(merge(input, input, input).text, input);
 }
 
 #[test]
 fn roundtrip_comments() {
     let input = concat!(
         "// A leading comment\n",
+        "/* A block comment */\n",
         "Paragraph after comment.\n"
     );
-    let doc = parse_document(input).unwrap();
-    let output = document_to_tm(&doc);
-
-    // Divergence: Comments are completely stripped because AST does not retain them.
-    assert_eq!(output, "Paragraph after comment.\n");
+    let output = export_doc(&import_source(input));
+    assert_eq!(output, input);
+    assert_eq!(merge(input, input, input).text, input);
 }
 
 #[test]
@@ -96,50 +73,46 @@ fn roundtrip_fenced_code() {
         "}\n",
         "```\n"
     );
-    let doc = parse_document(input).unwrap();
-    let output = document_to_tm(&doc);
-
-    // Stable: Fenced code blocks are preserved verbatim.
+    let output = export_doc(&import_source(input));
     assert_eq!(output, input);
+    assert_eq!(merge(input, input, input).text, input);
 }
 
 #[test]
-fn merge_disjoint_edits_roundtrip() {
+fn merge_disjoint_edits_preserves_all_untouched_formatting_byte_for_byte() {
     let base_text = concat!(
+        "::meta{ title: \"Doc\", count: 1 }\n\n",
         "=[ Title ]\n\n",
-        "First section content.\n\n",
+        "// Comment before first section\n",
+        "First section with *italic* and **bold**.\n\n",
+        "@callout(type: \"info\")[\n",
+        "  Multi-line callout content.\n",
+        "]\n\n",
         "==[ Section Two ]\n\n",
         "Second section content.\n"
     );
-    let local_text = concat!(
-        "=[ Title ]\n\n",
-        "First section content edited locally.\n\n",
-        "==[ Section Two ]\n\n",
-        "Second section content.\n"
+    let local_text = base_text.replace(
+        "First section with *italic* and **bold**.",
+        "First section edited locally with *italic* and **bold**.",
     );
-    let remote_text = concat!(
-        "=[ Title ]\n\n",
-        "First section content.\n\n",
-        "==[ Section Two ]\n\n",
-        "Second section content edited remotely.\n"
+    let remote_text = base_text.replace(
+        "Second section content.",
+        "Second section content edited remotely.",
     );
 
-    let base_doc = parse_document(base_text).unwrap();
-    let local_doc = parse_document(local_text).unwrap();
-    let remote_doc = parse_document(remote_text).unwrap();
-
-    let res = tomet::merge::merge(&base_doc, &local_doc, &remote_doc);
+    let res = merge(base_text, &local_text, &remote_text);
     assert!(res.clean);
 
-    let merged_text = document_to_tm(&res.document);
-
-    // The merge combines disjoint edits accurately, with the aforementioned
-    // heading formatting applied to all sections during serialization.
     let expected = concat!(
-        "=[Title]\n",
-        "First section content edited locally.\n",
-        "==[Section Two]\n",
+        "::meta{ title: \"Doc\", count: 1 }\n\n",
+        "=[ Title ]\n\n",
+        "// Comment before first section\n",
+        "First section edited locally with *italic* and **bold**.\n\n",
+        "@callout(type: \"info\")[\n",
+        "  Multi-line callout content.\n",
+        "]\n\n",
+        "==[ Section Two ]\n\n",
         "Second section content edited remotely.\n"
     );
-    assert_eq!(merged_text, expected);
+    assert_eq!(res.text, expected);
 }
