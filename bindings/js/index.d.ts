@@ -12,6 +12,7 @@ export interface Span {
 export interface ConflictInfo {
   index: number;
   kind: 'block' | 'inline' | 'scalar';
+  /** Range of BYTE offsets into the UTF-8 source (not UTF-16 string indices). */
   span: Span;
   a: string;
   b: string;

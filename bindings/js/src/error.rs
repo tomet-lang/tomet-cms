@@ -1,8 +1,8 @@
 //! Structured error translation between Rust errors and JavaScript `Error` objects.
 
-use tomet_cms::conflict::ConflictError;
 use tomet_cms::host::HostError;
 use tomet_cms::save::SaveError;
+use tomet_cms::tomet::merge::ConflictError;
 use wasm_bindgen::prelude::*;
 
 /// Constructs a JavaScript `Error` instance with an attached `.code: string` property.
@@ -15,14 +15,13 @@ pub fn create_js_error(code: &str, message: &str) -> JsValue {
 /// Maps [`ConflictError`] to a JavaScript error object with an appropriate `.code`.
 pub fn map_conflict_error(err: ConflictError) -> JsValue {
     match err {
-        ConflictError::ParseError(msg) => create_js_error("ConflictParseError", &msg),
+        ConflictError::Malformed { offset, message } => create_js_error(
+            "ConflictParseError",
+            &format!("invalid conflict marker at byte {offset}: {message}"),
+        ),
         ConflictError::IndexOutOfBounds { index, count } => create_js_error(
             "IndexOutOfBounds",
             &format!("conflict index {index} out of bounds (found {count} conflicts)"),
-        ),
-        ConflictError::InvalidMarker { index, message } => create_js_error(
-            "ConflictParseError",
-            &format!("invalid conflict marker at index {index}: {message}"),
         ),
     }
 }

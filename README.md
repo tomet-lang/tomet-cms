@@ -13,7 +13,7 @@ Content management system for the Tomet ecosystem.
 - **UI-less & I/O-free library**: Pure logic engine compiled for both native and WebAssembly (`wasm32-unknown-unknown`).
 - **AST-level 3-way merge**: Resolves concurrent document edits using `tomet::merge::merge` instead of line-based diff3.
 - **Optimistic save flow**: Saves directly against the remote head revision with automatic, bounded retries on branch movement.
-- **Byte-identical conflict resolution**: Resolves individual `@conflict` markers by span substitution without re-formatting the surrounding document.
+- **Source-faithful conflict resolution**: Lists and resolves individual `@conflict` markers with `tomet::merge`, which reads the syntax tree: the chosen side is spliced in as it was written, the rest of the document is not re-formatted, and a marker that cannot be read is an error, never skipped.
 
 ### What it is not
 
@@ -40,7 +40,7 @@ Content management system for the Tomet ecosystem.
     - Conflicting edits record `@conflict(a: ..., b: ...)` markers in-place (`has_conflicts: true`) and commit the resulting file as normal.
     - Remote deletions with local modifications follow Git conventions: local content is preserved and reported with a provisional `SaveWarning::ModifyDeleteConflict`.
 
-5. The committed text is inspected via the `conflict` module to determine `has_conflicts: bool`.
+5. The committed text is inspected with `tomet::merge::has_conflicts` to determine `has_conflicts: bool`; a marker that cannot be read counts as a conflict.
 6. The result is committed on top of `head` with the caller-supplied commit message. If the branch moved concurrently, the engine retries up to a bounded limit.
 
 ## WebAssembly Constraints

@@ -105,11 +105,12 @@ Final paragraph.
   assert.equal(scalarConflicts[0].a, 'Alpha');
   assert.equal(scalarConflicts[0].b, 'Beta');
 
+  // The chosen side is kept as it was written, quotes included.
   const resolvedScalarB = resolveConflict(scalarSource, 0, 'b');
   assert.equal(
     resolvedScalarB,
     `::meta{
-  title: Beta
+  title: "Beta"
 }
 `,
   );
@@ -129,10 +130,54 @@ test('resolveConflict throws with structured error codes', () => {
     (err) => err.code === 'InvalidSide',
   );
 
-  const malformed = `::meta{ unclosed`;
-  assert.throws(
-    () => listConflicts(malformed),
-    (err) => err.code === 'ConflictParseError',
+  // A marker that cannot be read is an error, never skipped.
+  for (const malformed of [
+    `@conflict(a: [A]`,
+    `@conflict(a: [A])`,
+    `text @conflict(a: [A], b: [B], c: [C]) text`,
+    `- item @conflict(a: [A], b: ) end`,
+  ]) {
+    assert.throws(
+      () => listConflicts(malformed),
+      (err) => err.code === 'ConflictParseError',
+      malformed,
+    );
+    assert.throws(
+      () => resolveConflict(malformed, 0, 'a'),
+      (err) => err.code === 'ConflictParseError',
+      malformed,
+    );
+  }
+
+  // A document without a marker has no conflicts, even when it is otherwise broken.
+  assert.deepEqual(listConflicts(`::meta{ unclosed`), []);
+});
+
+test('listConflicts finds markers anywhere and keeps the sides as written', () => {
+  const inItem = `- one @conflict(a: [uno], b: [ein])\n- two\n`;
+  assert.deepEqual(
+    listConflicts(inItem).map((c) => [c.kind, c.a, c.b]),
+    [['inline', 'uno', 'ein']],
+  );
+  assert.equal(resolveConflict(inItem, 0, 'b'), `- one ein\n- two\n`);
+
+  const inHeading = `=[ @conflict(a: [Uno], b: [Ein]) ]\n`;
+  assert.equal(listConflicts(inHeading).length, 1);
+
+  // Sides are not parsed and printed again: `*y*` stays `*y*`.
+  const styled = `see @conflict(a: [ *y* ], b: [ **z** ]) end`;
+  const [c] = listConflicts(styled);
+  assert.equal(c.a, '*y*');
+  assert.equal(c.b, '**z**');
+  assert.equal(resolveConflict(styled, 0, 'a'), 'see *y* end');
+
+  // Spans are byte offsets into the UTF-8 source.
+  const jp = `日本語 @conflict(a: [左], b: [右]) 終\n`;
+  const [j] = listConflicts(jp);
+  const bytes = new TextEncoder().encode(jp);
+  assert.equal(
+    new TextDecoder().decode(bytes.slice(j.span.start, j.span.end)),
+    `@conflict(a: [左], b: [右])`,
   );
 });
 

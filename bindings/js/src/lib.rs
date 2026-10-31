@@ -8,8 +8,8 @@ use std::fmt;
 
 use error::{create_js_error, map_conflict_error, map_host_error, map_save_error};
 use http::JsHttpClient;
-use tomet_cms::conflict::{ConflictKind, ConflictSide};
 use tomet_cms::host::{Host, Revision};
+use tomet_cms::tomet::merge::{self, ConflictKind, ConflictResolution};
 use tomet_cms_github::GitHubHost;
 use types::{
     CreateFileReqDto, EditFileReqDto, GitHubCmsOptionsDto, JsConflictInfo, JsReadFileResult,
@@ -23,11 +23,13 @@ use wasm_bindgen::prelude::*;
 
 /// Finds and lists all `@conflict` markers in `.tmt` document source.
 ///
-/// Returns an array of [`JsConflictInfo`] objects in top-down document order.
-/// Throws an `Error` with `.code = "ConflictParseError"` if the document cannot be parsed.
+/// Returns an array of [`JsConflictInfo`] objects in top-down document order. `span` is a
+/// range of BYTE offsets into the UTF-8 source, and `a`/`b` are the sides as written in it.
+/// Throws an `Error` with `.code = "ConflictParseError"` if a marker cannot be read: an
+/// unreadable marker is never skipped.
 #[wasm_bindgen(js_name = listConflicts)]
 pub fn list_conflicts(source: &str) -> Result<JsValue, JsValue> {
-    let conflicts = tomet_cms::conflict::list_conflicts(source).map_err(map_conflict_error)?;
+    let conflicts = merge::find_conflicts(source).map_err(map_conflict_error)?;
     let js_conflicts: Vec<JsConflictInfo> = conflicts
         .into_iter()
         .map(|c| JsConflictInfo {
@@ -53,21 +55,22 @@ pub fn list_conflicts(source: &str) -> Result<JsValue, JsValue> {
 /// Resolves a single `@conflict` marker at `index` to the chosen `side` (`"a"` or `"b"`).
 ///
 /// Returns the updated document source text with the marker replaced by the chosen
-/// side and all other bytes preserved byte-identically.
+/// side, written as it stood in the marker. Every byte outside the marker is kept; a block
+/// marker also takes the line break after it with it.
 ///
 /// Throws an `Error` with:
 /// - `.code = "IndexOutOfBounds"` if `index` does not exist.
 /// - `.code = "InvalidSide"` if `side` is not `"a"` or `"b"`.
-/// - `.code = "ConflictParseError"` if parsing or markers are invalid.
+/// - `.code = "ConflictParseError"` if a marker in the document cannot be read.
 #[wasm_bindgen(js_name = resolveConflict)]
 pub fn resolve_conflict(source: &str, index: usize, side: &str) -> Result<String, JsValue> {
-    let conflict_side = match side {
-        "a" | "A" => ConflictSide::A,
-        "b" | "B" => ConflictSide::B,
+    let resolution = match side {
+        "a" | "A" => ConflictResolution::A,
+        "b" | "B" => ConflictResolution::B,
         _ => return Err(create_js_error("InvalidSide", "conflict side must be 'a' or 'b'")),
     };
 
-    tomet_cms::conflict::resolve_conflict(source, index, conflict_side).map_err(map_conflict_error)
+    merge::resolve_single(source, index, resolution).map_err(map_conflict_error)
 }
 
 // ---------------------------------------------------------------------------

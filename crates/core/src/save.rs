@@ -157,7 +157,7 @@ impl<'a> SaveRequest<'a> {
 /// 3. Reads remote content at HEAD and base content at `request.base_rev`.
 /// 4. If creating (`base_rev: None`) and file exists at HEAD, fails with [`SaveError::AlreadyExists`].
 /// 5. Merges ASTs using `tomet::merge::merge` (or fast-path if remote == base).
-/// 6. Computes `has_conflicts` from the committed text via the `conflict` module.
+/// 6. Computes `has_conflicts` from the committed text with `tomet::merge::has_conflicts`.
 /// 7. Commits the result on top of HEAD with `request.message`.
 /// 8. Retries automatically on [`HostError::BranchMoved`] up to the retry limit.
 pub async fn save<H: Host>(
@@ -244,9 +244,8 @@ pub async fn save_with_options<H: Host>(
         };
 
         // Determine whether committed text contains any unresolved conflict markers
-        let has_conflicts = crate::conflict::list_conflicts(&content_to_commit)
-            .map(|c| !c.is_empty())
-            .unwrap_or_else(|_| content_to_commit.contains("@conflict"));
+        // (a marker that cannot be read counts as one).
+        let has_conflicts = tomet::merge::has_conflicts(&content_to_commit);
 
         // Attempt commit on top of head_rev
         match host
@@ -327,6 +326,20 @@ mod tests {
             host.last_commit_message(),
             Some("Keep conflict".to_string())
         );
+    }
+
+    #[test]
+    fn a_marker_in_a_list_item_or_an_unreadable_one_reports_has_conflicts() {
+        for text in [
+            "- one @conflict(a: [uno], b: [ein])\n- two\n",
+            "Alpha @conflict(a: [Mine]\n",
+        ] {
+            let host = MemoryHost::with_files([("note.tmt", text)]);
+            let base_rev = host.current_head();
+            let req = SaveRequest::edit("note.tmt", &base_rev, text, "Keep");
+            let res = block_on(save(&host, req)).unwrap();
+            assert!(res.has_conflicts, "{text:?}");
+        }
     }
 
     #[test]
